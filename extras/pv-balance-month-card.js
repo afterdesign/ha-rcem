@@ -22,6 +22,7 @@ const MONTHS_GEN = [
 
 const fmtPLN = (v) =>
   `${v < 0 ? "−" : ""}${Math.abs(v).toLocaleString("pl-PL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} zł`;
+const num = (v, d = 1) => v.toLocaleString("pl-PL", { minimumFractionDigits: d, maximumFractionDigits: d });
 const fmtKWh = (v) => `${v.toLocaleString("pl-PL", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kWh`;
 
 class PvBalanceMonthCard extends HTMLElement {
@@ -51,7 +52,7 @@ class PvBalanceMonthCard extends HTMLElement {
   }
 
   getGridOptions() {
-    return { columns: "full", rows: 9, min_rows: 6 };
+    return { columns: "full", rows: "auto" };
   }
 
   set hass(hass) {
@@ -98,7 +99,7 @@ class PvBalanceMonthCard extends HTMLElement {
         <div class="legend">
           <span><span class="dot" style="background:#30a46c"></span>Eksport do sieci</span>
           <span><span class="dot" style="background:#e5484d"></span>Import z sieci</span>
-          <span>Kwota nad słupkiem: zarobek za eksport − koszt importu</span>
+          <span class="hint">Kwota dnia (zarobek za eksport − koszt importu): nad słupkiem lub po najechaniu / dotknięciu</span>
         </div>
       </ha-card>`;
     this.shadowRoot.querySelector(".title").textContent = this._c.title;
@@ -222,10 +223,10 @@ class PvBalanceMonthCard extends HTMLElement {
         <div class="s">śr. ${fmtPLN(balance / D.elapsed)} / dzień</div></div>
       <div class="kpi"><div class="l">Eksport → zarobek</div>
         <div class="v pos">${fmtPLN(earn)}</div>
-        <div class="s">${fmtKWh(exp)} · ${exp ? (earn / exp).toFixed(3).replace(".", ",") : "–"} zł/kWh</div></div>
+        <div class="s">${fmtKWh(exp)} · ${exp ? num(earn / exp, 3) : "–"} zł/kWh</div></div>
       <div class="kpi"><div class="l">Import → koszt energii</div>
         <div class="v neg">${fmtPLN(cost)}</div>
-        <div class="s">${fmtKWh(imp)} (T1 ${impT1.toFixed(1).replace(".", ",")} · T2 ${impT2.toFixed(1).replace(".", ",")})</div></div>
+        <div class="s">${fmtKWh(imp)} (T1 ${num(impT1)} · T2 ${num(impT2)})</div></div>
       <div class="kpi"><div class="l">Opłaty stałe</div>
         <div class="v">${fmtPLN(D.fixed)}</div>
         <div class="s">z ${fmtPLN(this._c.fixed_monthly)} / mies.</div></div>
@@ -258,12 +259,13 @@ class PvBalanceMonthCard extends HTMLElement {
       g += `<rect x="${padL + i * slot}" y="${padT}" width="${slot}" height="${plotH}" fill="transparent"/>`;
       if (hu > 0) g += `<rect x="${x}" y="${zero - hu}" width="${bw}" height="${hu}" rx="2" fill="#30a46c"/>`;
       if (hd > 0) g += `<rect x="${x}" y="${zero}" width="${bw}" height="${hd}" rx="2" fill="#e5484d"/>`;
-      if (o.exp || o.imp) {
+      // Day amounts need ~16 px per bar to stay legible; narrower charts rely on the tooltip.
+      if ((o.exp || o.imp) && slot >= 16) {
         const net = o.net;
-        const txt = (net >= 0 ? "+" : "−") + Math.abs(net).toFixed(Math.abs(net) >= 10 || slot < 26 ? 0 : 1);
+        const txt = (net >= 0 ? "+" : "−") + num(Math.abs(net), Math.abs(net) >= 10 || slot < 26 ? 0 : 1);
         g += `<text x="${x + bw / 2}" y="${zero - hu - 4}" text-anchor="middle" font-size="${slot < 22 ? 9 : 10}" font-weight="600" fill="${net >= 0 ? "#30a46c" : "#e5484d"}">${txt}</text>`;
       }
-      if ((i + 1) % labelEvery === 0 || i === 0)
+      if (labelEvery === 1 || o.d % 2 === 1)
         g += `<text x="${x + bw / 2}" y="${H - 6}" text-anchor="middle" font-size="11" fill="var(--secondary-text-color)">${o.d}</text>`;
       g += `</g>`;
     });
@@ -277,7 +279,7 @@ class PvBalanceMonthCard extends HTMLElement {
       const o = D.day[+grp.dataset.i];
       tip.innerHTML = `<b>${o.d} ${MONTHS_GEN[+D.month.slice(5) - 1]}</b><br>
         Eksport: ${fmtKWh(o.exp)} → <span class="pos">${fmtPLN(o.earn)}</span><br>
-        Import: ${fmtKWh(o.imp)} (T1 ${o.impT1.toFixed(1)} / T2 ${o.impT2.toFixed(1)}) → <span class="neg">${fmtPLN(-o.cost)}</span><br>
+        Import: ${fmtKWh(o.imp)} (T1 ${num(o.impT1)} / T2 ${num(o.impT2)}) → <span class="neg">${fmtPLN(-o.cost)}</span><br>
         <b>Dzień: <span class="${o.net >= 0 ? "pos" : "neg"}">${fmtPLN(o.net)}</span></b>`;
       tip.style.display = "block";
       const box = this.shadowRoot.querySelector(".chart").getBoundingClientRect();
@@ -285,6 +287,8 @@ class PvBalanceMonthCard extends HTMLElement {
       tip.style.left = `${Math.min(left, box.width - tip.offsetWidth - 4)}px`;
       tip.style.top = `${ev.clientY - box.top - tip.offsetHeight - 8}px`;
     };
+    // Touch screens have no hover: a tap on a day shows the same tooltip.
+    svg.onpointerdown = svg.onmousemove;
     svg.onmouseleave = () => { tip.style.display = "none"; };
   }
 }
