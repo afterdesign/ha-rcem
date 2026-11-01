@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 from .parser import MonthPrice
+
+Method = Literal["published", "rce", "last_published"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -12,9 +15,14 @@ class ResolvedPrice:
     """Price that applies to a given month."""
 
     month: str  # month the price applies to, e.g. 2026-10
-    source_month: str  # month whose published RCEm was used
+    source_month: str  # month whose RCEm (or RCE estimate) was used
     net_kwh: float  # PLN/kWh, net
-    estimated: bool  # True when the month is not published yet
+    method: Method
+
+    @property
+    def estimated(self) -> bool:
+        """Return True when the month is not published yet."""
+        return self.method != "published"
 
 
 def month_key(year: int, month: int) -> str:
@@ -28,21 +36,31 @@ def resolve_price(
     *,
     use_corrected: bool = True,
     estimate: bool = True,
+    rce_estimates: dict[str, float] | None = None,
 ) -> ResolvedPrice | None:
     """Return the RCEm for month `key` in PLN/kWh (net).
 
-    When the month is not published yet and `estimate` is set, the latest
-    month published before it is used and the result is flagged as estimated.
+    For a month PSE hasn't published, `rce_estimates` (PLN/MWh, estimated from
+    RCE) is used: the month's own estimate, else the latest earlier one. Without
+    any, the latest month published before it is reused.
     """
     if (price := prices.get(key)) is not None:
-        return ResolvedPrice(key, key, price.value(use_corrected) / 1000, False)
+        return ResolvedPrice(key, key, price.value(use_corrected) / 1000, "published")
     if not estimate:
         return None
+    if rce_estimates:
+        if key in rce_estimates:
+            return ResolvedPrice(key, key, rce_estimates[key] / 1000, "rce")
+        latest_published = max(prices, default="")
+        earlier = [k for k in rce_estimates if latest_published < k < key]
+        if earlier:
+            src = max(earlier)
+            return ResolvedPrice(key, src, rce_estimates[src] / 1000, "rce")
     earlier = [k for k in prices if k < key]
     if not earlier:
         return None
     src = max(earlier)
-    return ResolvedPrice(key, src, prices[src].value(use_corrected) / 1000, True)
+    return ResolvedPrice(key, src, prices[src].value(use_corrected) / 1000, "last_published")
 
 
 def gross(net: float, vat_percent: float) -> float:

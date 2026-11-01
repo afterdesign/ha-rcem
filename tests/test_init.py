@@ -71,7 +71,12 @@ async def test_earnings(
     entry = MockConfigEntry(
         domain=DOMAIN,
         unique_id=DOMAIN,
-        options={"export_entity": EXPORT, "vat": 23, "use_corrected": True, "estimate": True},
+        options={
+            "export_entity": EXPORT,
+            "vat": 23,
+            "use_corrected": True,
+            "estimate_method": "last_published",
+        },
     )
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)
@@ -147,3 +152,105 @@ async def test_earnings(
     assert aioclient_mock.call_count == 1
     state = hass.states.get("sensor.rcem_pse_rcem_price_net")
     assert float(state.state) == pytest.approx(0.300)
+
+
+def _api_rows(url, field, value_fn):
+    """Fake PSE API page: 96 quarter-hours per day in the filtered date range."""
+    flt = url.query["$filter"]
+    start, end = (datetime.fromisoformat(x).date() for x in flt.split("'")[1::2])
+    rows = []
+    day = start
+    while day <= end:
+        for q in range(96):
+            h, m = divmod(q * 15, 60)
+            h2, m2 = divmod(q * 15 + 15, 60)
+            rows.append(
+                {
+                    "business_date": day.isoformat(),
+                    "period": f"{h:02d}:{m:02d} - {h2 % 24:02d}:{m2:02d}",
+                    field: value_fn(day, q),
+                }
+            )
+        day += timedelta(days=1)
+    return {"value": rows}
+
+
+@pytest.mark.parametrize("time_zone", ["Europe/Warsaw"])
+async def test_rce_estimate(
+    recorder_mock: Recorder,
+    enable_custom_integrations: None,
+    hass: HomeAssistant,
+    aioclient_mock: AiohttpClientMocker,
+    freezer: FrozenDateTimeFactory,
+    time_zone: str,
+):
+    """Unpublished October is estimated from RCE weighted by PV × calibration."""
+    await hass.config.async_set_time_zone(time_zone)
+    freezer.move_to("2026-11-01T12:30:00+01:00")
+    aioclient_mock.get(URL, text=HTML)
+
+    # October RCE is 500 PLN/MWh, earlier months 400; PV only around noon,
+    # where a price spike (ignored: no PV) and a negative price (clamped) sit.
+    def rce(day, q):
+        if q == 2:
+            return 9999.0
+        if q == 48:
+            return -100.0
+        return 500.0 if day.month == 10 and day.year == 2026 else 400.0
+
+    def pv(day, q):
+        return 1000.0 if 40 <= q <= 56 else 0.0
+
+    async def api(method, url, data):
+        from pytest_homeassistant_custom_component.test_util.aiohttp import (
+            AiohttpClientMockResponse,
+        )
+
+        if url.path.endswith("rce-pln"):
+            body = _api_rows(url, "rce_pln", rce)
+        else:
+            body = _api_rows(url, "pv", pv)
+        return AiohttpClientMockResponse(method, url, json=body)
+
+    aioclient_mock.get("https://api.raporty.pse.pl/api/rce-pln", side_effect=api)
+    aioclient_mock.get("https://api.raporty.pse.pl/api/his-wlk-cal", side_effect=api)
+
+    start = dt_util.as_utc(datetime(2026, 10, 1, tzinfo=dt_util.get_default_time_zone()))
+    await _import_export_stats(hass, start, 24 * 31 + 1 + 12, 1.0)
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id=DOMAIN,
+        options={"export_entity": EXPORT, "vat": 23, "use_corrected": True, "estimate": True},
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    await async_wait_recording_done(hass)
+
+    # PV-weighted RCE: 16 noon periods at 400/500 and one at 0 (clamped).
+    weighted = {m: v * 16 / 17 for m, v in (("old", 400.0), ("oct", 500.0))}
+    from custom_components.rcem.parser import parse_rcem
+
+    prices = parse_rcem(HTML)
+    calib = [k for k in sorted(prices, reverse=True) if k >= "2025-10"][:12]
+    factor = sum(prices[k].value() / weighted["old"] for k in calib) / len(calib)
+    expected_oct = weighted["oct"] * factor / 1000
+
+    state = hass.states.get("sensor.rcem_pse_rcem_price_net")
+    assert state.attributes["estimate_method"] == "rce"
+    assert state.attributes["source_month"] == "2026-10"  # November falls back to October
+    assert state.attributes["calibration_factor"] == pytest.approx(factor, rel=1e-3)
+    assert float(state.state) == pytest.approx(expected_oct, abs=1e-5)
+
+    month = hass.states.get("sensor.rcem_pse_earnings_last_month_net")
+    assert month.attributes["estimate_method"] == "rce"
+    assert month.attributes["rce_days"] == 31
+    assert float(month.state) == pytest.approx(round((24 * 31 + 1) * expected_oct, 2), abs=0.01)
+
+    stats = await recorder_mock.async_add_executor_job(
+        statistics_during_period,
+        hass, start, None, {"rcem:earnings_net"}, "month", None, {"change"},
+    )
+    assert stats["rcem:earnings_net"][0]["change"] == pytest.approx((24 * 31 + 1) * expected_oct)

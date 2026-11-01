@@ -20,18 +20,24 @@ from homeassistant.util import dt as dt_util
 from .calc import ResolvedPrice, month_key, resolve_price
 from .const import (
     CONF_ESTIMATE,
+    CONF_ESTIMATE_METHOD,
     CONF_EXPORT_ENTITY,
     CONF_USE_CORRECTED,
     CONF_VAT,
     DEFAULT_ESTIMATE,
+    DEFAULT_ESTIMATE_METHOD,
     DEFAULT_USE_CORRECTED,
     DEFAULT_VAT,
     DOMAIN,
+    ESTIMATE_NONE,
+    ESTIMATE_RCE,
     FETCH_INTERVAL,
     FETCH_TIMEOUT,
+    FORECAST_INTERVAL,
     UPDATE_INTERVAL,
     URL,
 )
+from .forecast import MonthEstimate, RceForecast, estimate_months
 from .parser import MonthPrice, parse_rcem
 from .statistics import StatisticsSync, SyncResult
 
@@ -49,6 +55,7 @@ class RcemData:
     current: ResolvedPrice | None
     latest: MonthPrice | None
     earnings: SyncResult
+    estimates: dict[str, MonthEstimate]
 
 
 class RcemCoordinator(DataUpdateCoordinator[RcemData]):
@@ -68,14 +75,19 @@ class RcemCoordinator(DataUpdateCoordinator[RcemData]):
         self.export_entity: str | None = opts.get(CONF_EXPORT_ENTITY) or None
         self.vat: float = float(opts.get(CONF_VAT, DEFAULT_VAT))
         self.use_corrected: bool = opts.get(CONF_USE_CORRECTED, DEFAULT_USE_CORRECTED)
-        self.estimate: bool = opts.get(CONF_ESTIMATE, DEFAULT_ESTIMATE)
+        # Entries from 0.1.x only have the CONF_ESTIMATE on/off switch.
+        legacy = DEFAULT_ESTIMATE_METHOD if opts.get(CONF_ESTIMATE, DEFAULT_ESTIMATE) else ESTIMATE_NONE
+        self.estimate_method: str = opts.get(CONF_ESTIMATE_METHOD, legacy)
+        self.forecast = RceForecast(hass) if self.estimate_method == ESTIMATE_RCE else None
+        self._forecast_updated: datetime | None = None
+        self._forecast_running = False
         self.stats = StatisticsSync(
             hass,
             entry.entry_id,
             export_entity=self.export_entity,
             vat=self.vat,
             use_corrected=self.use_corrected,
-            estimate=self.estimate,
+            estimate_method=self.estimate_method,
         )
         self._prices: dict[str, MonthPrice] | None = None
         self._fetched: datetime | None = None
@@ -131,18 +143,49 @@ class RcemCoordinator(DataUpdateCoordinator[RcemData]):
                 )
 
         prices = self._prices
+        estimates: dict[str, MonthEstimate] = {}
+        if self.forecast is not None:
+            await self.forecast.async_load()
+            self._schedule_forecast(prices, now)
+            estimates = estimate_months(
+                self.forecast.days, prices, use_corrected=self.use_corrected
+            )
+        rce_estimates = {k: e.value for k, e in estimates.items()}
         local = dt_util.now()
         current = resolve_price(
             prices,
             month_key(local.year, local.month),
             use_corrected=self.use_corrected,
-            estimate=True,
+            estimate=self.estimate_method != ESTIMATE_NONE,
+            rce_estimates=rce_estimates,
         )
-        earnings = await self.stats.async_sync(prices)
+        earnings = await self.stats.async_sync(prices, rce_estimates)
         return RcemData(
             prices=prices,
             fetched=self._fetched or now,
             current=current,
             latest=prices[max(prices)],
             earnings=earnings,
+            estimates=estimates,
         )
+
+    def _schedule_forecast(self, prices: dict[str, MonthPrice], now: datetime) -> None:
+        """Refresh RCE/PV data in the background; the first fetch takes a while."""
+        if self._forecast_running or (
+            self._forecast_updated is not None
+            and now - self._forecast_updated < FORECAST_INTERVAL
+        ):
+            return
+        self._forecast_running = True
+        self.config_entry.async_create_background_task(
+            self.hass, self._async_update_forecast(prices), f"{DOMAIN}_forecast"
+        )
+
+    async def _async_update_forecast(self, prices: dict[str, MonthPrice]) -> None:
+        assert self.forecast is not None
+        try:
+            await self.forecast.async_update(prices)
+            self._forecast_updated = dt_util.utcnow()
+        finally:
+            self._forecast_running = False
+        await self.async_request_refresh()

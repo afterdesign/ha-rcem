@@ -13,19 +13,25 @@ from homeassistant.helpers import selector
 
 from .const import (
     CONF_ESTIMATE,
+    CONF_ESTIMATE_METHOD,
     CONF_EXPORT_ENTITY,
     CONF_USE_CORRECTED,
     CONF_VAT,
     DEFAULT_ESTIMATE,
+    DEFAULT_ESTIMATE_METHOD,
     DEFAULT_USE_CORRECTED,
     DEFAULT_VAT,
     DOMAIN,
+    ESTIMATE_METHODS,
+    ESTIMATE_NONE,
     NAME,
 )
 
 
 def _schema(values: dict[str, Any]) -> vol.Schema:
     export = values.get(CONF_EXPORT_ENTITY)
+    legacy = DEFAULT_ESTIMATE_METHOD if values.get(CONF_ESTIMATE, DEFAULT_ESTIMATE) else ESTIMATE_NONE
+    method = values.get(CONF_ESTIMATE_METHOD, legacy)
     return vol.Schema(
         {
             vol.Optional(
@@ -46,9 +52,13 @@ def _schema(values: dict[str, Any]) -> vol.Schema:
                 CONF_USE_CORRECTED,
                 default=values.get(CONF_USE_CORRECTED, DEFAULT_USE_CORRECTED),
             ): selector.BooleanSelector(),
-            vol.Required(
-                CONF_ESTIMATE, default=values.get(CONF_ESTIMATE, DEFAULT_ESTIMATE)
-            ): selector.BooleanSelector(),
+            vol.Required(CONF_ESTIMATE_METHOD, default=method): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=ESTIMATE_METHODS,
+                    translation_key=CONF_ESTIMATE_METHOD,
+                    mode=selector.SelectSelectorMode.LIST,
+                )
+            ),
         }
     )
 

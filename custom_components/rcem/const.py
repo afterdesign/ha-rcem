@@ -10,16 +10,30 @@ URL = "https://www.pse.pl/oire/rcem-rynkowa-miesieczna-cena-energii-elektrycznej
 CONF_EXPORT_ENTITY = "export_entity"
 CONF_VAT = "vat"
 CONF_USE_CORRECTED = "use_corrected"
-CONF_ESTIMATE = "estimate"
+CONF_ESTIMATE = "estimate"  # legacy bool, replaced by CONF_ESTIMATE_METHOD
+CONF_ESTIMATE_METHOD = "estimate_method"
 
 DEFAULT_VAT = 23.0
 DEFAULT_USE_CORRECTED = True
 DEFAULT_ESTIMATE = True
 
+ESTIMATE_RCE = "rce"
+ESTIMATE_LAST_PUBLISHED = "last_published"
+ESTIMATE_NONE = "none"
+ESTIMATE_METHODS = [ESTIMATE_RCE, ESTIMATE_LAST_PUBLISHED, ESTIMATE_NONE]
+DEFAULT_ESTIMATE_METHOD = ESTIMATE_RCE
+
 UPDATE_INTERVAL = timedelta(hours=1)
 FETCH_INTERVAL = timedelta(hours=3)
 # pse.pl is often slow to accept connections.
 FETCH_TIMEOUT = 60
+
+# RCE + PV data used to estimate unpublished months.
+API_URL = "https://api.raporty.pse.pl/api"
+FORECAST_INTERVAL = timedelta(hours=6)
+CALIBRATION_MONTHS = 12
+# A day has 96 quarter-hours (92 on the spring DST change).
+MIN_PERIODS_PER_DAY = 92
 
 CURRENCY = "PLN"
 PRICE_UNIT = "PLN/kWh"

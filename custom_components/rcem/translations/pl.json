@@ -8,12 +8,12 @@
           "export_entity": "Sensor energii oddanej do sieci",
           "vat": "Stawka VAT",
           "use_corrected": "Używaj skorygowanej RCEm",
-          "estimate": "Szacuj niepublikowane miesiące ostatnią ceną"
+          "estimate_method": "Szacowanie nieopublikowanych miesięcy"
         },
         "data_description": {
           "export_entity": "Licznik kWh (total_increasing) eksportu. Bez niego dostępne są tylko ceny.",
           "use_corrected": "PSE publikuje korekty RCEm po kilku miesiącach; używaj najnowszej.",
-          "estimate": "RCEm za miesiąc pojawia się ok. 11. dnia następnego miesiąca. Do tego czasu zarobek liczony jest ostatnią opublikowaną ceną i przeliczany po publikacji."
+          "estimate_method": "RCEm za miesiąc pojawia się ok. 11. dnia następnego miesiąca. Do tego czasu zarobek liczony jest szacunkiem i przeliczany po publikacji ceny przez PSE."
         }
       }
     },
@@ -30,12 +30,12 @@
           "export_entity": "Sensor energii oddanej do sieci",
           "vat": "Stawka VAT",
           "use_corrected": "Używaj skorygowanej RCEm",
-          "estimate": "Szacuj niepublikowane miesiące ostatnią ceną"
+          "estimate_method": "Szacowanie nieopublikowanych miesięcy"
         },
         "data_description": {
           "export_entity": "Licznik kWh (total_increasing) eksportu. Bez niego dostępne są tylko ceny.",
           "use_corrected": "PSE publikuje korekty RCEm po kilku miesiącach; używaj najnowszej.",
-          "estimate": "RCEm za miesiąc pojawia się ok. 11. dnia następnego miesiąca. Do tego czasu zarobek liczony jest ostatnią opublikowaną ceną i przeliczany po publikacji."
+          "estimate_method": "RCEm za miesiąc pojawia się ok. 11. dnia następnego miesiąca. Do tego czasu zarobek liczony jest szacunkiem i przeliczany po publikacji ceny przez PSE."
         }
       }
     }
@@ -65,6 +65,15 @@
       },
       "earnings_total_gross": {
         "name": "Zarobek łącznie brutto"
+      }
+    }
+  },
+  "selector": {
+    "estimate_method": {
+      "options": {
+        "rce": "Z RCE i krajowej generacji PV (API PSE, błąd ok. 7%)",
+        "last_published": "Ostatnia opublikowana RCEm (błąd ok. 30%)",
+        "none": "Nie szacuj (0 zł do publikacji)"
       }
     }
   }

@@ -35,6 +35,8 @@ from .calc import ResolvedPrice, gross, month_key, resolve_price
 from .const import (
     CURRENCY,
     DOMAIN,
+    ESTIMATE_NONE,
+    ESTIMATE_RCE,
     PRICE_ONLY_MONTHS_BACK,
     PRICE_UNIT,
     STAT_EARNINGS_GROSS,
@@ -92,13 +94,14 @@ class StatisticsSync:
         export_entity: str | None,
         vat: float,
         use_corrected: bool,
-        estimate: bool,
+        estimate_method: str,
     ) -> None:
         self.hass = hass
         self.export_entity = export_entity
         self.vat = vat
         self.use_corrected = use_corrected
-        self.estimate = estimate
+        self.estimate_method = estimate_method
+        self._rce_estimates: dict[str, float] = {}
         self._store: Store[dict[str, Any]] = Store(hass, 1, f"{DOMAIN}.{entry_id}")
 
     async def async_reset(self) -> None:
@@ -107,14 +110,19 @@ class StatisticsSync:
 
     def _resolve(self, prices: dict[str, MonthPrice], key: str) -> ResolvedPrice | None:
         return resolve_price(
-            prices, key, use_corrected=self.use_corrected, estimate=self.estimate
+            prices,
+            key,
+            use_corrected=self.use_corrected,
+            estimate=self.estimate_method != ESTIMATE_NONE,
+            rce_estimates=self._rce_estimates,
         )
 
     def _signature(self, prices: dict[str, MonthPrice], origin: datetime) -> str:
         payload = {
             "prices": {k: p.value(self.use_corrected) for k, p in prices.items()},
             "vat": self.vat,
-            "estimate": self.estimate,
+            "estimate": self.estimate_method,
+            "rce": {k: round(v, 2) for k, v in self._rce_estimates.items()},
             "export": self.export_entity,
             "origin": origin.isoformat(),
         }
@@ -123,8 +131,13 @@ class StatisticsSync:
     async def _db(self, func, *args):
         return await get_instance(self.hass).async_add_executor_job(func, *args)
 
-    async def async_sync(self, prices: dict[str, MonthPrice]) -> SyncResult:
+    async def async_sync(
+        self, prices: dict[str, MonthPrice], rce_estimates: dict[str, float]
+    ) -> SyncResult:
         """Bring statistics up to date and return the monthly breakdown."""
+        self._rce_estimates = (
+            rce_estimates if self.estimate_method == ESTIMATE_RCE else {}
+        )
         tz = dt_util.get_default_time_zone()
         now_hour = dt_util.utcnow().replace(minute=0, second=0, microsecond=0)
         result = SyncResult()

@@ -27,7 +27,33 @@ Aplikacja wymaga Home Assistant OS lub Supervised. Na innych instalacjach skopiu
 | Sensor energii oddanej do sieci | licznik kWh eksportu (np. ten sam co w panelu Energia). Bez niego integracja daje tylko ceny |
 | Stawka VAT | domyślnie 23% (cena brutto = netto × 1,23) |
 | Używaj skorygowanej RCEm | PSE publikuje korekty po kilku miesiącach; brana jest najnowsza |
-| Szacuj niepublikowane miesiące | RCEm za miesiąc pojawia się ok. 11. dnia następnego miesiąca. Do tego czasu zarobek liczony jest ostatnią opublikowaną ceną, a po publikacji historia jest przeliczana |
+| Szacowanie nieopublikowanych miesięcy | RCEm za miesiąc pojawia się ok. 11. dnia następnego miesiąca. Do tego czasu zarobek liczony jest szacunkiem, a po publikacji historia jest przeliczana. Do wyboru: **z RCE i generacji PV** (domyślnie), **ostatnia opublikowana RCEm** albo **bez szacowania** |
+
+### Jak szacowana jest RCEm
+
+PSE liczy RCEm jako średnią cen RCE ważoną energią, którą prosumenci wprowadzili do sieci
+(art. 4b ustawy o OZE; ujemne RCE liczone jako 0):
+
+> RCEm = Σ(Eₜ · RCEₜ) / ΣEₜ
+
+Wolumen prosumentów (Eₜ) nie jest publiczny, więc integracja pobiera z
+[API PSE](https://api.raporty.pse.pl) ceny RCE (`rce-pln`) i krajową generację PV (`his-wlk-cal`)
+co 15 minut i liczy średnią RCE ważoną generacją PV. Taka średnia jest systematycznie o ok. 15%
+za wysoka (autokonsumpcja „zjada” poranną i wieczorną produkcję, więc do sieci trafia głównie
+tańszy szczyt w południe), dlatego wynik mnożony jest przez współczynnik kalibracji: średni
+stosunek opublikowanej RCEm do RCE ważonej PV z ostatnich 12 opublikowanych miesięcy.
+
+Walidacja krokowa na 04.2025–09.2026 (współczynnik liczony tylko z wcześniejszych miesięcy):
+
+| Metoda | Średni błąd | Najgorszy miesiąc | lip–wrz 2026 |
+|---|---|---|---|
+| RCE ważona PV × współczynnik | 7,3% | 20,2% | 2,2% |
+| Ostatnia opublikowana RCEm | 29,9% | 72,6% | 9,8% |
+
+Szacunek aktualizuje się co 6 godzin, w miarę dochodzenia danych z kolejnych dni. Miesiąc bez danych
+(np. 1. dnia miesiąca) dostaje szacunek poprzedniego nieopublikowanego miesiąca. Gdy API PSE jest
+niedostępne, używana jest ostatnia opublikowana RCEm. Atrybuty sensorów `estimate_method`,
+`calibration_factor`, `pv_weighted_rce` i `rce_days` pokazują, skąd pochodzi szacunek.
 
 ## Co dostajesz
 

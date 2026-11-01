@@ -17,7 +17,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
-from .calc import gross, month_key
+from .calc import ResolvedPrice, gross, month_key
 from .const import CURRENCY, DOMAIN, NAME, PRICE_UNIT, URL
 from .coordinator import RcemConfigEntry, RcemCoordinator, RcemData
 from .statistics import MonthEarnings
@@ -39,18 +39,34 @@ def _price(c: RcemCoordinator, d: RcemData, *, with_vat: bool) -> float | None:
     return round(value, 5)
 
 
+def _estimate_attrs(c: RcemCoordinator, d: RcemData, price: ResolvedPrice) -> dict[str, Any]:
+    """Describe where a month's price comes from."""
+    attrs: dict[str, Any] = {
+        "estimated": price.estimated,
+        "estimate_method": price.method,
+        "source_month": price.source_month,
+    }
+    if price.method == "rce" and (est := d.estimates.get(price.source_month)):
+        attrs.update(
+            pln_per_mwh=round(est.value, 2),
+            pv_weighted_rce=round(est.pv_weighted, 2),
+            calibration_factor=round(est.factor, 4),
+            rce_days=est.days,
+        )
+    elif (src := d.prices.get(price.source_month)) is not None:
+        attrs.update(
+            pln_per_mwh=src.value(c.use_corrected),
+            published=src.published(c.use_corrected),
+            corrected=c.use_corrected and src.corrected is not None,
+        )
+    return attrs
+
+
 def _price_attrs(c: RcemCoordinator, d: RcemData, *, with_vat: bool) -> dict[str, Any]:
     attrs: dict[str, Any] = {}
     if d.current is not None:
-        src = d.prices[d.current.source_month]
-        attrs.update(
-            month=d.current.month,
-            source_month=d.current.source_month,
-            estimated=d.current.estimated,
-            published=src.published(c.use_corrected),
-            corrected=c.use_corrected and src.corrected is not None,
-            pln_per_mwh=src.value(c.use_corrected),
-        )
+        attrs["month"] = d.current.month
+        attrs.update(_estimate_attrs(c, d, d.current))
     attrs["vat_percent"] = c.vat if with_vat else 0
     attrs["prices"] = {
         k: round(gross(p.value(c.use_corrected) / 1000, c.vat if with_vat else 0), 5)
@@ -86,8 +102,7 @@ def _month_attrs(c: RcemCoordinator, d: RcemData, offset: int) -> dict[str, Any]
         attrs["exported_kwh"] = round(m.kwh, 3)
         if m.price is not None:
             attrs["price_net"] = round(m.price.net_kwh, 5)
-            attrs["estimated"] = m.price.estimated
-            attrs["source_month"] = m.price.source_month
+            attrs.update(_estimate_attrs(c, d, m.price))
     return attrs
 
 
@@ -101,6 +116,7 @@ def _total_attrs(c: RcemCoordinator, d: RcemData) -> dict[str, Any]:
                 "net": round(m.net, 2),
                 "gross": round(m.gross, 2),
                 "estimated": m.price.estimated if m.price else None,
+                "method": m.price.method if m.price else None,
             }
             for k, m in d.earnings.months.items()
         },
