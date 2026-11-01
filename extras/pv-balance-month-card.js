@@ -7,14 +7,20 @@
 // import_entity: enea:<PPE>_energia_pobrana
 // export_entity: enea:<PPE>_energia_oddana
 // earnings_statistic: rcem:earnings_gross
-// energy_t1: 0.5829         # PLN/kWh net, energy (sprzedaż), day zone
-// energy_t2: 0.3419         #                               night zone
-// dist_t1: 0.3214           # PLN/kWh net, variable distribution (sieciowa + jakościowa + OZE + kogeneracyjna)
-// dist_t2: 0.1351
 // vat: 23
 // t2_hours: [13, 14, 22, 23, 0, 1, 2, 3, 4, 5]
 // fixed_monthly: 52.2135    # PLN gross: stała sieciowa + mocowa + abonamentowa
-// Without energy_*/dist_*, price_t1/price_t2 (gross, all-in) are used as one import price.
+// tariffs:                  # net PLN/kWh, each valid from its date until the next one
+//   - from: "2025-01-01"    # G11: one energy price (dist optional)
+//     energy: 0.5051
+//   - from: "2026-08-17"    # G12: energy (sprzedaż) and variable distribution per zone
+//     energy_t1: 0.5829
+//     energy_t2: 0.3419
+//     dist_t1: 0.3214       # sieciowa + jakościowa + OZE + kogeneracyjna
+//     dist_t2: 0.1351
+// A tariff without dist/dist_t* leaves distribution unknown for its hours.
+// Without tariffs, energy_t1/energy_t2/dist_t1/dist_t2 or price_t1/price_t2
+// (gross, all-in) are used for the whole month.
 
 const MONTHS_PL = [
   "Styczeń", "Luty", "Marzec", "Kwiecień", "Maj", "Czerwiec",
@@ -169,20 +175,39 @@ class PvBalanceMonthCard extends HTMLElement {
     this._error = null;
     const t2 = new Set(c.t2_hours.map(Number));
     const vat = 1 + c.vat / 100;
-    const split = c.energy_t1 != null;
-    const rate = {
-      e1: split ? c.energy_t1 * vat : c.price_t1, e2: split ? c.energy_t2 * vat : c.price_t2,
-      d1: split ? (c.dist_t1 || 0) * vat : 0, d2: split ? (c.dist_t2 || 0) * vat : 0,
+    const tariffs = (c.tariffs && c.tariffs.length ? c.tariffs : [c])
+      .map((t) => ({ ...t, fromTs: t.from ? new Date(`${t.from}T00:00:00`).getTime() : -Infinity }))
+      .sort((a, b) => a.fromTs - b.fromTs);
+    const rateFor = (ts) => {
+      let t = tariffs[0];
+      for (const x of tariffs) if (x.fromTs <= ts) t = x;
+      if (t.energy_t1 != null)
+        return { zones: true, e1: t.energy_t1 * vat, e2: t.energy_t2 * vat,
+                 d1: t.dist_t1 != null ? t.dist_t1 * vat : null, d2: t.dist_t2 != null ? t.dist_t2 * vat : null };
+      if (t.energy != null) {
+        const d = t.dist != null ? t.dist * vat : null;
+        return { zones: false, e1: t.energy * vat, e2: t.energy * vat, d1: d, d2: d };
+      }
+      return { zones: true, e1: t.price_t1, e2: t.price_t2, d1: 0, d2: 0, allIn: true };
     };
+    let split = false, distUnknown = false, g11 = false;
     const day = Array.from({ length: days }, (_, i) => ({
-      d: i + 1, exp: 0, imp: 0, impT1: 0, impT2: 0, energy: 0, dist: 0, cost: 0, earn: 0,
+      d: i + 1, exp: 0, imp: 0, impT1: 0, impT2: 0, impG11: 0, energy: 0, dist: 0, cost: 0, earn: 0,
     }));
     for (const r of res[c.import_entity] || []) {
       const t = new Date(r.start);
       const kwh = r.change || 0;
       const o = day[t.getDate() - 1];
-      if (t2.has(t.getHours())) { o.impT2 += kwh; o.energy += kwh * rate.e2; o.dist += kwh * rate.d2; }
-      else { o.impT1 += kwh; o.energy += kwh * rate.e1; o.dist += kwh * rate.d1; }
+      const rate = rateFor(t.getTime());
+      if (!rate.allIn) split = true;
+      const night = rate.zones && t2.has(t.getHours());
+      const dRate = night ? rate.d2 : rate.d1;
+      if (!rate.zones) { o.impG11 += kwh; g11 = true; }
+      else if (night) o.impT2 += kwh;
+      else o.impT1 += kwh;
+      o.energy += kwh * (night ? rate.e2 : rate.e1);
+      if (dRate == null) { if (kwh > 0) distUnknown = true; }
+      else o.dist += kwh * dRate;
       o.imp += kwh;
       o.cost = o.energy + o.dist;
     }
@@ -197,7 +222,7 @@ class PvBalanceMonthCard extends HTMLElement {
       month, days, day, elapsed,
       fixed: (c.fixed_monthly * elapsed) / days,
       estimated: !!months[month]?.estimated,
-      split,
+      split, distUnknown, g11,
     };
     this._render();
   }
@@ -222,7 +247,8 @@ class PvBalanceMonthCard extends HTMLElement {
     }
     const sum = (k) => D.day.reduce((a, o) => a + o[k], 0);
     const exp = sum("exp"), imp = sum("imp"), earn = sum("earn"), cost = sum("cost");
-    const energy = sum("energy"), dist = sum("dist");
+    const energy = sum("energy"), dist = sum("dist"), impG11 = sum("impG11");
+    const zonesTxt = `${impG11 ? `G11 ${num(impG11)} · ` : ""}T1 ${num(impT1)} · T2 ${num(impT2)}`;
     const impT1 = sum("impT1"), impT2 = sum("impT2");
     const balance = earn - cost - D.fixed;
     title.innerHTML = "";
@@ -236,10 +262,10 @@ class PvBalanceMonthCard extends HTMLElement {
     const importKpis = D.split
       ? `<div class="kpi"><div class="l">Energia pobrana (pokrywa depozyt)</div>
           <div class="v neg">${fmtPLN(energy)}</div>
-          <div class="s">${fmtKWh(imp)} (T1 ${num(impT1)} · T2 ${num(impT2)})</div></div>
+          <div class="s">${fmtKWh(imp)} (${zonesTxt})</div></div>
         <div class="kpi"><div class="l">Dystrybucja (płatna zawsze)</div>
-          <div class="v neg">${fmtPLN(dist + D.fixed)}</div>
-          <div class="s">zmienna ${fmtPLN(dist)} + stała ${fmtPLN(D.fixed)}</div></div>`
+          <div class="v neg">${fmtPLN(dist + D.fixed)}${D.distUnknown ? " +?" : ""}</div>
+          <div class="s">zmienna ${fmtPLN(dist)} + stała ${fmtPLN(D.fixed)}${D.distUnknown ? " · brak cen dystrybucji dla części miesiąca" : ""}</div></div>`
       : `<div class="kpi"><div class="l">Import → koszt energii</div>
           <div class="v neg">${fmtPLN(cost)}</div>
           <div class="s">${fmtKWh(imp)} (T1 ${num(impT1)} · T2 ${num(impT2)})</div></div>
@@ -249,7 +275,7 @@ class PvBalanceMonthCard extends HTMLElement {
     kpis.innerHTML = `
       <div class="kpi"><div class="l">Bilans miesiąca</div>
         <div class="v ${balance >= 0 ? "pos" : "neg"}">${fmtPLN(balance)}</div>
-        <div class="s">depozyt − energia − dystrybucja · śr. ${fmtPLN(balance / D.elapsed)} / dzień</div></div>
+        <div class="s">depozyt − energia − dystrybucja${D.distUnknown ? " (bez nieznanej części dystrybucji)" : ""} · śr. ${fmtPLN(balance / D.elapsed)} / dzień</div></div>
       <div class="kpi"><div class="l">Depozyt z eksportu (RCEm × 1,23)</div>
         <div class="v pos">${fmtPLN(earn)}</div>
         <div class="s">${fmtKWh(exp)} · ${exp ? num(earn / exp, 3) : "–"} zł/kWh</div></div>
@@ -303,7 +329,7 @@ class PvBalanceMonthCard extends HTMLElement {
       const o = D.day[+grp.dataset.i];
       tip.innerHTML = `<b>${o.d} ${MONTHS_GEN[+D.month.slice(5) - 1]}</b><br>
         Eksport: ${fmtKWh(o.exp)} → depozyt <span class="pos">${fmtPLN(o.earn)}</span><br>
-        Import: ${fmtKWh(o.imp)} (T1 ${num(o.impT1)} / T2 ${num(o.impT2)}) → <span class="neg">${fmtPLN(-o.cost)}</span><br>
+        Import: ${fmtKWh(o.imp)} (${o.impG11 ? `G11 ${num(o.impG11)}` : `T1 ${num(o.impT1)} / T2 ${num(o.impT2)}`}) → <span class="neg">${fmtPLN(-o.cost)}</span><br>
         ${D.split ? `<span style="color:var(--secondary-text-color)">energia ${fmtPLN(o.energy)} · dystrybucja ${fmtPLN(o.dist)}</span><br>` : ""}
         <b>Dzień: <span class="${o.net >= 0 ? "pos" : "neg"}">${fmtPLN(o.net)}</span></b>`;
       tip.style.display = "block";

@@ -3,6 +3,8 @@
 from datetime import date
 from pathlib import Path
 
+import pytest
+
 from custom_components.rcem.calc import resolve_price
 from custom_components.rcem.parser import parse_rcem
 
@@ -42,3 +44,13 @@ def test_resolve_estimate():
     assert est.estimated and est.source_month == "2026-09"
     assert resolve_price(prices, "2026-11", estimate=False) is None
     assert resolve_price(prices, "2020-01") is None
+
+
+def test_deposit_factor_applies_from_february_2025():
+    from custom_components.rcem.calc import gross
+
+    # Enea: 01.2025 deposit 41.28 PLN for ~86 kWh at RCEm 480.01 (no ×1.23),
+    # 02.2025 deposit 185.94 PLN for 342 kWh at 442.02 (×1.23).
+    assert gross(100.0, 23, "2025-01") == pytest.approx(100.0)
+    assert gross(100.0, 23, "2025-02") == pytest.approx(123.0)
+    assert gross(100.0, 23) == pytest.approx(123.0)

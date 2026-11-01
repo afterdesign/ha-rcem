@@ -63,6 +63,13 @@ def resolve_price(
     return ResolvedPrice(key, src, prices[src].value(use_corrected) / 1000, "last_published")
 
 
-def gross(net: float, vat_percent: float) -> float:
-    """Apply VAT."""
+# Since February 2025 the prosumer deposit is RCEm × 1.23 (Dz.U. 2024 poz. 1847);
+# before that it was RCEm alone. Checked against Enea deposits (01–02.2025).
+DEPOSIT_FACTOR_FROM = "2025-02"
+
+
+def gross(net: float, vat_percent: float, month: str | None = None) -> float:
+    """Apply the deposit multiplier (1 + VAT) for months where it applies."""
+    if month is not None and month < DEPOSIT_FACTOR_FROM:
+        return net
     return net * (1 + vat_percent / 100)

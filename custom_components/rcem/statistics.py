@@ -31,7 +31,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
-from .calc import ResolvedPrice, gross, month_key, resolve_price
+from .calc import DEPOSIT_FACTOR_FROM, ResolvedPrice, gross, month_key, resolve_price
 from .const import (
     CURRENCY,
     DOMAIN,
@@ -121,6 +121,7 @@ class StatisticsSync:
         payload = {
             "prices": {k: p.value(self.use_corrected) for k, p in prices.items()},
             "vat": self.vat,
+            "deposit_factor_from": DEPOSIT_FACTOR_FROM,
             "estimate": self.estimate_method,
             "rce": {k: round(v, 2) for k, v in self._rce_estimates.items()},
             "export": self.export_entity,
@@ -176,9 +177,9 @@ class StatisticsSync:
             kwh = row.get("change") or 0.0
             price = self._resolve(prices, key)
             net = kwh * price.net_kwh if price else 0.0
-            result.months[key] = MonthEarnings(key, kwh, price, net, gross(net, self.vat))
+            result.months[key] = MonthEarnings(key, kwh, price, net, gross(net, self.vat, key))
             result.total_net += net
-            result.total_gross += gross(net, self.vat)
+            result.total_gross += gross(net, self.vat, key)
 
         signature = self._signature(prices, origin)
         stored = await self._store.async_load() or {}
@@ -221,7 +222,7 @@ class StatisticsSync:
         hour = start
         while hour < now_hour:
             if (p := price_at(hour)) is not None:
-                g = gross(p.net_kwh, self.vat)
+                g = gross(p.net_kwh, self.vat, p.month)
                 price_net_rows.append(
                     StatisticData(start=hour, mean=p.net_kwh, min=p.net_kwh, max=p.net_kwh)
                 )
@@ -247,7 +248,7 @@ class StatisticsSync:
                 p = price_at(ts)
                 value = (row.get("change") or 0.0) * p.net_kwh if p else 0.0
                 sum_net += value
-                sum_gross += gross(value, self.vat)
+                sum_gross += gross(value, self.vat, p.month if p else None)
                 earn_net_rows.append(StatisticData(start=ts, state=sum_net, sum=sum_net))
                 earn_gross_rows.append(
                     StatisticData(start=ts, state=sum_gross, sum=sum_gross)

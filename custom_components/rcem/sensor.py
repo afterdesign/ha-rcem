@@ -35,7 +35,7 @@ class RcemSensorDescription(SensorEntityDescription):
 def _price(c: RcemCoordinator, d: RcemData, *, with_vat: bool) -> float | None:
     if d.current is None:
         return None
-    value = gross(d.current.net_kwh, c.vat) if with_vat else d.current.net_kwh
+    value = gross(d.current.net_kwh, c.vat, d.current.month) if with_vat else d.current.net_kwh
     return round(value, 5)
 
 
@@ -69,7 +69,7 @@ def _price_attrs(c: RcemCoordinator, d: RcemData, *, with_vat: bool) -> dict[str
         attrs.update(_estimate_attrs(c, d, d.current))
     attrs["vat_percent"] = c.vat if with_vat else 0
     attrs["prices"] = {
-        k: round(gross(p.value(c.use_corrected) / 1000, c.vat if with_vat else 0), 5)
+        k: round(gross(p.value(c.use_corrected) / 1000, c.vat if with_vat else 0, k), 5)
         for k, p in d.prices.items()
     }
     attrs["fetched"] = d.fetched
