@@ -8,7 +8,7 @@ i liczy, ile zarobiła energia oddana do sieci. Każda godzina miesiąca ma tę 
 
 1. Dodaj repozytorium aplikacji i zainstaluj aplikację **RCEm Installer**:
 
-   [![Dodaj repozytorium do Home Assistant](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2FOWNER%2Fha-rcem)
+   [![Dodaj repozytorium do Home Assistant](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fafterdesign%2Fha-rcem)
 
 2. Uruchom aplikację (**Start**). Skopiuje integrację do `custom_components/rcem` i wyświetli powiadomienie.
 3. Zrestartuj Home Assistant.
@@ -31,14 +31,14 @@ Aplikacja wymaga Home Assistant OS lub Supervised. Na innych instalacjach skopiu
 
 ## Co dostajesz
 
-**Encje**
+**Encje** (identyfikatory dla HA w języku angielskim; przy polskim języku nazwy i ID będą polskie)
 
 | Encja | Opis |
 |---|---|
-| `sensor.rcem_pse_cena_rcem_netto` / `_brutto` | cena obowiązująca w bieżącym miesiącu [PLN/kWh]; atrybut `estimated` mówi, czy to szacunek, `prices` zawiera wszystkie miesiące |
-| `sensor.rcem_pse_zarobek_biezacy_miesiac_netto` / `_brutto` | zarobek w bieżącym miesiącu [PLN] |
-| `sensor.rcem_pse_zarobek_poprzedni_miesiac_netto` / `_brutto` | zarobek w poprzednim miesiącu [PLN] |
-| `sensor.rcem_pse_zarobek_lacznie_netto` / `_brutto` | zarobek od początku historii licznika; atrybut `months` zawiera rozbicie na miesiące |
+| `sensor.rcem_pse_rcem_price_net` / `_gross` | cena obowiązująca w bieżącym miesiącu [PLN/kWh]; atrybut `estimated` mówi, czy to szacunek, `prices` zawiera wszystkie miesiące |
+| `sensor.rcem_pse_earnings_this_month_net` / `_gross` | zarobek w bieżącym miesiącu [PLN] |
+| `sensor.rcem_pse_earnings_last_month_net` / `_gross` | zarobek w poprzednim miesiącu [PLN] |
+| `sensor.rcem_pse_earnings_total_net` / `_gross` | zarobek od początku historii licznika; atrybut `months` zawiera rozbicie na miesiące |
 
 **Statystyki długoterminowe** (do wykresów; godzinowe, agregowane do dnia, tygodnia i miesiąca):
 

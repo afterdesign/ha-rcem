@@ -84,6 +84,7 @@ class RcemCoordinator(DataUpdateCoordinator[RcemData]):
             resp.raise_for_status()
             html = await resp.text()
         prices = parse_rcem(html)
+        _LOGGER.debug("Fetched RCEm page: %d months, latest %s", len(prices), max(prices, default=None))
         if not prices:
             raise UpdateFailed("No RCEm prices found on the PSE page")
         return prices

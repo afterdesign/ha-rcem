@@ -52,6 +52,7 @@ async def _import_export_stats(hass: HomeAssistant, start: datetime, hours: int,
 @pytest.mark.parametrize("time_zone", ["Europe/Warsaw"])
 async def test_earnings(
     recorder_mock: Recorder,
+    enable_custom_integrations: None,
     hass: HomeAssistant,
     aioclient_mock: AiohttpClientMocker,
     freezer: FrozenDateTimeFactory,
@@ -77,9 +78,7 @@ async def test_earnings(
     await hass.async_block_till_done()
     await async_wait_recording_done(hass)
 
-    price = hass.states.get("sensor.rcem_pse_cena_rcem_netto") or hass.states.get(
-        "sensor.rcem_pse_rcem_price_net"
-    )
+    price = hass.states.get("sensor.rcem_pse_rcem_price_net")
     assert price is not None, sorted(hass.states.async_entity_ids("sensor"))
     assert float(price.state) == pytest.approx(0.34568)
     assert price.attributes["estimated"] is True
@@ -123,10 +122,12 @@ async def test_earnings(
     aioclient_mock.clear_requests()
     aioclient_mock.get(URL, text=html_oct)
     freezer.tick(timedelta(hours=4))
-    async_fire_time_changed(hass)
-    await hass.async_block_till_done()
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=5))
+    # Scheduled coordinator refreshes run as background tasks.
+    await hass.async_block_till_done(wait_background_tasks=True)
     await async_wait_recording_done(hass)
 
+    assert hass.states.get("sensor.rcem_pse_rcem_price_net").attributes["source_month"] == "2026-10"
     stats = await recorder_mock.async_add_executor_job(
         statistics_during_period,
         hass, start, None, {"rcem:earnings_net", "rcem:price_net"}, "month", None, {"change", "mean"},

@@ -4,10 +4,10 @@
   "codeowners": [],
   "config_flow": true,
   "dependencies": ["recorder"],
-  "documentation": "https://github.com/OWNER/ha-rcem",
+  "documentation": "https://github.com/afterdesign/ha-rcem",
   "integration_type": "service",
   "iot_class": "cloud_polling",
-  "issue_tracker": "https://github.com/OWNER/ha-rcem/issues",
+  "issue_tracker": "https://github.com/afterdesign/ha-rcem/issues",
   "requirements": [],
   "single_config_entry": true,
   "version": "0.1.0"
