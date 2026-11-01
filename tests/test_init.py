@@ -254,3 +254,58 @@ async def test_rce_estimate(
         hass, start, None, {"rcem:earnings_net"}, "month", None, {"change"},
     )
     assert stats["rcem:earnings_net"][0]["change"] == pytest.approx((24 * 31 + 1) * expected_oct)
+
+
+@pytest.mark.parametrize("time_zone", ["Europe/Warsaw"])
+async def test_external_meter_statistic(
+    recorder_mock: Recorder,
+    enable_custom_integrations: None,
+    hass: HomeAssistant,
+    aioclient_mock: AiohttpClientMocker,
+    freezer: FrozenDateTimeFactory,
+    time_zone: str,
+):
+    """Export taken from a billing meter's external statistic (e.g. Enea)."""
+    from homeassistant.components.recorder.statistics import async_add_external_statistics
+
+    await hass.config.async_set_time_zone(time_zone)
+    freezer.move_to("2026-10-05T12:30:00+02:00")
+    aioclient_mock.get(URL, text=HTML)
+    start = dt_util.as_utc(datetime(2026, 9, 1, tzinfo=dt_util.get_default_time_zone()))
+    rows, total = [], 0.0
+    for i in range(30 * 24):
+        total += 0.5
+        rows.append({"start": start + timedelta(hours=i), "state": total, "sum": total})
+    async_add_external_statistics(
+        hass,
+        {
+            "mean_type": StatisticMeanType.NONE,
+            "has_sum": True,
+            "name": "Energia oddana",
+            "source": "enea",
+            "statistic_id": "enea:meter_energia_oddana",
+            "unit_class": "energy",
+            "unit_of_measurement": "kWh",
+        },
+        rows,
+    )
+    await async_wait_recording_done(hass)
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id=DOMAIN,
+        options={
+            "export_entity": "enea:meter_energia_oddana",
+            "vat": 23,
+            "use_corrected": True,
+            "estimate_method": "last_published",
+        },
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    await async_wait_recording_done(hass)
+
+    last = hass.states.get("sensor.rcem_pse_earnings_last_month_gross")
+    assert float(last.state) == pytest.approx(round(360 * 0.34568 * 1.23, 2), abs=0.01)
+    assert last.attributes["export_entity"] == "enea:meter_energia_oddana"

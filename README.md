@@ -24,7 +24,7 @@ Aplikacja wymaga Home Assistant OS lub Supervised. Na innych instalacjach skopiu
 
 | Pole | Opis |
 |---|---|
-| Sensor energii oddanej do sieci | licznik kWh eksportu (np. ten sam co w panelu Energia). Bez niego integracja daje tylko ceny |
+| Statystyka energii oddanej do sieci | licznik kWh eksportu: sensor albo statystyka zewnętrzna. **Najlepiej licznik rozliczeniowy** (np. `enea:<PPE>_energia_oddana` z integracji Enea): liczniki falownika potrafią różnić się od licznika operatora o kilka–kilkanaście procent, a z licznikiem operatora zarobek zgadza się z rachunkiem co do grosza. Bez tego pola integracja daje tylko ceny |
 | Stawka VAT | domyślnie 23% (cena brutto = netto × 1,23) |
 | Używaj skorygowanej RCEm | PSE publikuje korekty po kilku miesiącach; brana jest najnowsza |
 | Szacowanie nieopublikowanych miesięcy | RCEm za miesiąc pojawia się ok. 11. dnia następnego miesiąca. Do tego czasu zarobek liczony jest szacunkiem, a po publikacji historia jest przeliczana. Do wyboru: **z RCE i generacji PV** (domyślnie), **ostatnia opublikowana RCEm** albo **bez szacowania** |

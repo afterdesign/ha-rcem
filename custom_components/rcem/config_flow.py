@@ -6,7 +6,6 @@ from typing import Any
 
 import voluptuous as vol
 
-from homeassistant.components.sensor import SensorDeviceClass
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlow
 from homeassistant.core import callback
 from homeassistant.helpers import selector
@@ -37,11 +36,7 @@ def _schema(values: dict[str, Any]) -> vol.Schema:
             vol.Optional(
                 CONF_EXPORT_ENTITY,
                 description={"suggested_value": export} if export else None,
-            ): selector.EntitySelector(
-                selector.EntitySelectorConfig(
-                    domain="sensor", device_class=SensorDeviceClass.ENERGY
-                )
-            ),
+            ): selector.StatisticSelector(),
             vol.Required(CONF_VAT, default=values.get(CONF_VAT, DEFAULT_VAT)): selector.NumberSelector(
                 selector.NumberSelectorConfig(
                     min=0, max=100, step=0.5, unit_of_measurement="%",

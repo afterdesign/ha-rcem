@@ -1,5 +1,5 @@
 name: RCEm Installer
-version: "0.2.0"
+version: "0.2.1"
 slug: rcem_installer
 description: Instaluje i aktualizuje integrację RCEm (PSE) w custom_components
 url: https://github.com/afterdesign/ha-rcem

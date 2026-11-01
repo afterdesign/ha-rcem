@@ -5,13 +5,13 @@
         "title": "RCEm (PSE)",
         "description": "Monthly market electricity price from PSE.",
         "data": {
-          "export_entity": "Grid export energy sensor",
+          "export_entity": "Grid export energy statistic",
           "vat": "VAT rate",
           "use_corrected": "Use corrected RCEm",
           "estimate_method": "Estimating unpublished months"
         },
         "data_description": {
-          "export_entity": "Exported energy meter (kWh). Without it only prices are provided.",
+          "export_entity": "Exported energy meter (kWh). Prefer the billing meter's statistic (e.g. from the Enea integration): inverter counters can differ from the meter by several percent. Without it only prices are provided.",
           "use_corrected": "PSE publishes corrections months later; use the latest one.",
           "estimate_method": "RCEm for a month is published around the 11th of the next month. Until then earnings use an estimate and are recalculated once PSE publishes the price."
         }
@@ -27,13 +27,13 @@
       "init": {
         "title": "RCEm (PSE)",
         "data": {
-          "export_entity": "Grid export energy sensor",
+          "export_entity": "Grid export energy statistic",
           "vat": "VAT rate",
           "use_corrected": "Use corrected RCEm",
           "estimate_method": "Estimating unpublished months"
         },
         "data_description": {
-          "export_entity": "Exported energy meter (kWh). Without it only prices are provided.",
+          "export_entity": "Exported energy meter (kWh). Prefer the billing meter's statistic (e.g. from the Enea integration): inverter counters can differ from the meter by several percent. Without it only prices are provided.",
           "use_corrected": "PSE publishes corrections months later; use the latest one.",
           "estimate_method": "RCEm for a month is published around the 11th of the next month. Until then earnings use an estimate and are recalculated once PSE publishes the price."
         }

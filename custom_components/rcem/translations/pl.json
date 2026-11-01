@@ -5,13 +5,13 @@
         "title": "RCEm (PSE)",
         "description": "Rynkowa miesięczna cena energii elektrycznej z PSE.",
         "data": {
-          "export_entity": "Sensor energii oddanej do sieci",
+          "export_entity": "Statystyka energii oddanej do sieci",
           "vat": "Stawka VAT",
           "use_corrected": "Używaj skorygowanej RCEm",
           "estimate_method": "Szacowanie nieopublikowanych miesięcy"
         },
         "data_description": {
-          "export_entity": "Licznik kWh (total_increasing) eksportu. Bez niego dostępne są tylko ceny.",
+          "export_entity": "Licznik energii oddanej (kWh). Najlepiej statystyka licznika rozliczeniowego (np. z integracji Enea): liczniki falownika potrafią różnić się od licznika o kilka–kilkanaście procent. Bez niej dostępne są tylko ceny.",
           "use_corrected": "PSE publikuje korekty RCEm po kilku miesiącach; używaj najnowszej.",
           "estimate_method": "RCEm za miesiąc pojawia się ok. 11. dnia następnego miesiąca. Do tego czasu zarobek liczony jest szacunkiem i przeliczany po publikacji ceny przez PSE."
         }
@@ -27,13 +27,13 @@
       "init": {
         "title": "RCEm (PSE)",
         "data": {
-          "export_entity": "Sensor energii oddanej do sieci",
+          "export_entity": "Statystyka energii oddanej do sieci",
           "vat": "Stawka VAT",
           "use_corrected": "Używaj skorygowanej RCEm",
           "estimate_method": "Szacowanie nieopublikowanych miesięcy"
         },
         "data_description": {
-          "export_entity": "Licznik kWh (total_increasing) eksportu. Bez niego dostępne są tylko ceny.",
+          "export_entity": "Licznik energii oddanej (kWh). Najlepiej statystyka licznika rozliczeniowego (np. z integracji Enea): liczniki falownika potrafią różnić się od licznika o kilka–kilkanaście procent. Bez niej dostępne są tylko ceny.",
           "use_corrected": "PSE publikuje korekty RCEm po kilku miesiącach; używaj najnowszej.",
           "estimate_method": "RCEm za miesiąc pojawia się ok. 11. dnia następnego miesiąca. Do tego czasu zarobek liczony jest szacunkiem i przeliczany po publikacji ceny przez PSE."
         }
