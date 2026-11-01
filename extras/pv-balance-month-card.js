@@ -190,7 +190,9 @@ class PvBalanceMonthCard extends HTMLElement {
       }
       return { zones: true, e1: t.price_t1, e2: t.price_t2, d1: 0, d2: 0, allIn: true };
     };
-    let split = false, distUnknown = false, g11 = false;
+    // The energy/distribution split is shown whenever prices are given per component.
+    let split = tariffs.some((t) => t.energy != null || t.energy_t1 != null);
+    let distUnknown = false, g11 = false;
     const day = Array.from({ length: days }, (_, i) => ({
       d: i + 1, exp: 0, imp: 0, impT1: 0, impT2: 0, impG11: 0, energy: 0, dist: 0, cost: 0, earn: 0,
     }));
@@ -199,7 +201,6 @@ class PvBalanceMonthCard extends HTMLElement {
       const kwh = r.change || 0;
       const o = day[t.getDate() - 1];
       const rate = rateFor(t.getTime());
-      if (!rate.allIn) split = true;
       const night = rate.zones && t2.has(t.getHours());
       const dRate = night ? rate.d2 : rate.d1;
       if (!rate.zones) { o.impG11 += kwh; g11 = true; }
@@ -248,8 +249,11 @@ class PvBalanceMonthCard extends HTMLElement {
     const sum = (k) => D.day.reduce((a, o) => a + o[k], 0);
     const exp = sum("exp"), imp = sum("imp"), earn = sum("earn"), cost = sum("cost");
     const energy = sum("energy"), dist = sum("dist"), impG11 = sum("impG11");
-    const zonesTxt = `${impG11 ? `G11 ${num(impG11)} · ` : ""}T1 ${num(impT1)} · T2 ${num(impT2)}`;
     const impT1 = sum("impT1"), impT2 = sum("impT2");
+    const zonesTxt = [
+      impG11 ? `G11 ${num(impG11)}` : "",
+      impT1 || impT2 || !impG11 ? `T1 ${num(impT1)} · T2 ${num(impT2)}` : "",
+    ].filter(Boolean).join(" · ");
     const balance = earn - cost - D.fixed;
     title.innerHTML = "";
     title.append(this._c.title);
