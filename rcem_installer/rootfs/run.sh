@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/with-contenv bash
 # Copies the bundled RCEm integration into Home Assistant's custom_components
 # and asks for a restart when the files changed.
 set -euo pipefail
@@ -9,7 +9,7 @@ VERSION=$(jq -r .version "$SRC/manifest.json")
 
 notify() {
   curl -fsS -X POST \
-    -H "Authorization: Bearer ${SUPERVISOR_TOKEN}" \
+    -H "Authorization: Bearer ${SUPERVISOR_TOKEN:-}" \
     -H "Content-Type: application/json" \
     -d "$(jq -n --arg t "$1" --arg m "$2" '{title: $t, message: $m, notification_id: "rcem_installer"}')" \
     http://supervisor/core/api/services/persistent_notification/create >/dev/null \
