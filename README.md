@@ -63,6 +63,52 @@ entities:
   - rcem:earnings_net
 ```
 
+### Wykres miesięcznego zarobku
+
+Każdy miesiąc liczony jest RCEm tego miesiąca. Miesiące jeszcze nieopublikowane przez PSE
+są szacowane ostatnią ceną i przeliczane po publikacji.
+
+```yaml
+type: statistics-graph
+title: Zarobek miesięczny (RCEm)
+chart_type: bar
+period: month
+days_to_show: 365
+stat_types: [change]
+entities:
+  - entity: rcem:earnings_gross
+    name: Brutto
+  - entity: rcem:earnings_net
+    name: Netto
+```
+
+### Tabela rozliczenia miesięcznego
+
+Karta markdown z atrybutu `months` sensora zarobku łącznego:
+
+```yaml
+type: markdown
+content: |
+  {% set months = state_attr('sensor.rcem_pse_earnings_total_gross', 'months') or {} %}
+  | Miesiąc | Eksport [kWh] | RCEm netto [zł/kWh] | Netto [zł] | Brutto [zł] |
+  |:--|--:|--:|--:|--:|
+  {% for k in months | sort(reverse=true) -%}
+  {% set m = months[k] -%}
+  | {{ k }}{{ ' *(szacunek)*' if m.estimated }} | {{ '%.1f' | format(m.kwh) }} | {{ '%.4f' | format(m.price_net) if m.price_net is not none else '–' }} | {{ '%.2f' | format(m.net) }} | {{ '%.2f' | format(m.gross) }} |
+  {% endfor -%}
+  | **Razem** | | | **{{ states('sensor.rcem_pse_earnings_total_net') }}** | **{{ states('sensor.rcem_pse_earnings_total_gross') }}** |
+```
+
+Przykładowy wynik:
+
+| Miesiąc | Eksport [kWh] | RCEm netto [zł/kWh] | Netto [zł] | Brutto [zł] |
+|:--|--:|--:|--:|--:|
+| 2026-10 *(szacunek)* | 249.3 | 0.3457 | 86.18 | 106.00 |
+| 2026-09 | 448.6 | 0.3457 | 155.07 | 190.74 |
+| 2026-08 | 789.4 | 0.2945 | 232.50 | 285.98 |
+| 2026-07 | 897.2 | 0.2629 | 235.86 | 290.10 |
+| 2026-06 | 945.2 | 0.2732 | 258.23 | 317.62 |
+
 ### Panel Energia
 
 W ustawieniach sieci (Grid) w panelu Energia, w polu rekompensaty za eksport, można wybrać
