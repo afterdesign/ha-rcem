@@ -1,0 +1,15 @@
+name: RCEm Installer
+version: "0.1.0"
+slug: rcem_installer
+description: Instaluje i aktualizuje integrację RCEm (PSE) w custom_components
+url: https://github.com/OWNER/ha-rcem
+arch:
+  - aarch64
+  - amd64
+startup: once
+boot: auto
+init: false
+homeassistant_api: true
+map:
+  - type: homeassistant_config
+    read_only: false

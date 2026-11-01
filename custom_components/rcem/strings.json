@@ -1,0 +1,71 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "RCEm (PSE)",
+        "description": "Monthly market electricity price from PSE.",
+        "data": {
+          "export_entity": "Grid export energy sensor",
+          "vat": "VAT rate",
+          "use_corrected": "Use corrected RCEm",
+          "estimate": "Estimate unpublished months with the latest price"
+        },
+        "data_description": {
+          "export_entity": "Exported energy meter (kWh). Without it only prices are provided.",
+          "use_corrected": "PSE publishes corrections months later; use the latest one.",
+          "estimate": "RCEm for a month is published around the 11th of the next month. Until then earnings use the latest published price and are recalculated afterwards."
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "Already configured.",
+      "single_instance_allowed": "Only a single instance is allowed."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "RCEm (PSE)",
+        "data": {
+          "export_entity": "Grid export energy sensor",
+          "vat": "VAT rate",
+          "use_corrected": "Use corrected RCEm",
+          "estimate": "Estimate unpublished months with the latest price"
+        },
+        "data_description": {
+          "export_entity": "Exported energy meter (kWh). Without it only prices are provided.",
+          "use_corrected": "PSE publishes corrections months later; use the latest one.",
+          "estimate": "RCEm for a month is published around the 11th of the next month. Until then earnings use the latest published price and are recalculated afterwards."
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "price_net": {
+        "name": "RCEm price net"
+      },
+      "price_gross": {
+        "name": "RCEm price gross"
+      },
+      "earnings_month_net": {
+        "name": "Earnings this month net"
+      },
+      "earnings_month_gross": {
+        "name": "Earnings this month gross"
+      },
+      "earnings_previous_month_net": {
+        "name": "Earnings last month net"
+      },
+      "earnings_previous_month_gross": {
+        "name": "Earnings last month gross"
+      },
+      "earnings_total_net": {
+        "name": "Earnings total net"
+      },
+      "earnings_total_gross": {
+        "name": "Earnings total gross"
+      }
+    }
+  }
+}
