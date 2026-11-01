@@ -136,3 +136,14 @@ async def test_earnings(
     assert months[0]["change"] == pytest.approx(sep_kwh * p)
     assert months[1]["change"] == pytest.approx(oct_kwh * 0.300)
     assert stats["rcem:price_net"][1]["mean"] == pytest.approx(0.300)
+
+    # PSE unreachable after a restart: prices come from the on-disk cache.
+    aioclient_mock.clear_requests()
+    aioclient_mock.get(URL, exc=TimeoutError())
+    freezer.tick(timedelta(hours=4))
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert entry.state.name == "LOADED"
+    assert aioclient_mock.call_count == 1
+    state = hass.states.get("sensor.rcem_pse_rcem_price_net")
+    assert float(state.state) == pytest.approx(0.300)

@@ -48,11 +48,42 @@ class MonthPrice:
             return self.corrected
         return self.original
 
+    def as_dict(self) -> dict:
+        """Serialize for storage."""
+        return {
+            "year": self.year,
+            "month": self.month,
+            "original": self.original,
+            "original_published": _iso(self.original_published),
+            "corrected": self.corrected,
+            "corrected_published": _iso(self.corrected_published),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> MonthPrice:
+        """Deserialize from storage."""
+        return cls(
+            year=data["year"],
+            month=data["month"],
+            original=data["original"],
+            original_published=_date(data.get("original_published")),
+            corrected=data.get("corrected"),
+            corrected_published=_date(data.get("corrected_published")),
+        )
+
     def published(self, use_corrected: bool = True) -> date | None:
         """Return the publication date of the price returned by value()."""
         if use_corrected and self.corrected is not None:
             return self.corrected_published
         return self.original_published
+
+
+def _iso(value: date | None) -> str | None:
+    return value.isoformat() if value else None
+
+
+def _date(value: str | None) -> date | None:
+    return date.fromisoformat(value) if value else None
 
 
 class _TableRows(HTMLParser):

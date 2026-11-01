@@ -18,6 +18,8 @@ DEFAULT_ESTIMATE = True
 
 UPDATE_INTERVAL = timedelta(hours=1)
 FETCH_INTERVAL = timedelta(hours=3)
+# pse.pl is often slow to accept connections.
+FETCH_TIMEOUT = 60
 
 CURRENCY = "PLN"
 PRICE_UNIT = "PLN/kWh"

@@ -6,12 +6,14 @@ import asyncio
 from dataclasses import dataclass
 from datetime import datetime
 import logging
+from typing import Any
 
 import aiohttp
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
@@ -26,6 +28,7 @@ from .const import (
     DEFAULT_VAT,
     DOMAIN,
     FETCH_INTERVAL,
+    FETCH_TIMEOUT,
     UPDATE_INTERVAL,
     URL,
 )
@@ -76,10 +79,20 @@ class RcemCoordinator(DataUpdateCoordinator[RcemData]):
         )
         self._prices: dict[str, MonthPrice] | None = None
         self._fetched: datetime | None = None
+        self._cache: Store[dict[str, Any]] = Store(hass, 1, f"{DOMAIN}.prices")
+        self._cache_loaded = False
+
+    async def _load_cache(self) -> None:
+        """Load the last fetched prices, so a restart doesn't depend on PSE."""
+        self._cache_loaded = True
+        if not (data := await self._cache.async_load()):
+            return
+        self._prices = {k: MonthPrice.from_dict(v) for k, v in data["prices"].items()}
+        self._fetched = dt_util.parse_datetime(data["fetched"])
 
     async def _fetch(self) -> dict[str, MonthPrice]:
         session = async_get_clientsession(self.hass)
-        async with asyncio.timeout(30):
+        async with asyncio.timeout(FETCH_TIMEOUT):
             resp = await session.get(URL, headers={"User-Agent": "HomeAssistant-RCEm"})
             resp.raise_for_status()
             html = await resp.text()
@@ -91,6 +104,8 @@ class RcemCoordinator(DataUpdateCoordinator[RcemData]):
 
     async def _async_update_data(self) -> RcemData:
         now = dt_util.utcnow()
+        if not self._cache_loaded:
+            await self._load_cache()
         if (
             self._prices is None
             or self._fetched is None
@@ -99,10 +114,21 @@ class RcemCoordinator(DataUpdateCoordinator[RcemData]):
             try:
                 self._prices = await self._fetch()
                 self._fetched = now
+                await self._cache.async_save(
+                    {
+                        "fetched": now.isoformat(),
+                        "prices": {k: p.as_dict() for k, p in self._prices.items()},
+                    }
+                )
             except (aiohttp.ClientError, TimeoutError, UpdateFailed) as err:
+                reason = str(err) or type(err).__name__
                 if self._prices is None:
-                    raise UpdateFailed(f"Cannot fetch RCEm from PSE: {err}") from err
-                _LOGGER.warning("Cannot refresh RCEm from PSE, using cached prices: %s", err)
+                    raise UpdateFailed(f"Cannot fetch RCEm from PSE: {reason}") from err
+                _LOGGER.warning(
+                    "Cannot refresh RCEm from PSE, using prices fetched %s: %s",
+                    self._fetched,
+                    reason,
+                )
 
         prices = self._prices
         local = dt_util.now()
