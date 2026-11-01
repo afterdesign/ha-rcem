@@ -1,14 +1,20 @@
-// Daily grid export/import for a selected month, valued with G12 import prices
-// (per hour, by tariff zone) and RCEm export earnings (rcem:earnings_* statistic).
+// Daily grid export/import for a selected month, split like an Enea net-billing
+// invoice: the prosumer deposit (export × RCEm × 1.23, from rcem:earnings_gross)
+// offsets only the energy part of the import; distribution is always paid.
+// Use the billing meter's hourly-balanced statistics (Enea integration) as sources.
 //
 // type: custom:pv-balance-month-card
-// import_entity: sensor.gospodarcze_inverter_total_energy_import
-// export_entity: sensor.gospodarcze_inverter_total_energy_export
+// import_entity: enea:<PPE>_energia_pobrana
+// export_entity: enea:<PPE>_energia_oddana
 // earnings_statistic: rcem:earnings_gross
-// price_t1: 1.1123          # PLN/kWh, gross
-// price_t2: 0.5863
+// energy_t1: 0.5829         # PLN/kWh net, energy (sprzedaż), day zone
+// energy_t2: 0.3419         #                               night zone
+// dist_t1: 0.3214           # PLN/kWh net, variable distribution (sieciowa + jakościowa + OZE + kogeneracyjna)
+// dist_t2: 0.1351
+// vat: 23
 // t2_hours: [13, 14, 22, 23, 0, 1, 2, 3, 4, 5]
-// fixed_monthly: 52.2135    # PLN, shown in the monthly summary only
+// fixed_monthly: 52.2135    # PLN gross: stała sieciowa + mocowa + abonamentowa
+// Without energy_*/dist_*, price_t1/price_t2 (gross, all-in) are used as one import price.
 
 const MONTHS_PL = [
   "Styczeń", "Luty", "Marzec", "Kwiecień", "Maj", "Czerwiec",
@@ -36,6 +42,7 @@ class PvBalanceMonthCard extends HTMLElement {
         earnings_statistic: "rcem:earnings_gross",
         price_t1: 1.1123,
         price_t2: 0.5863,
+        vat: 23,
         t2_hours: [13, 14, 22, 23, 0, 1, 2, 3, 4, 5],
         fixed_monthly: 0,
       },
@@ -99,7 +106,7 @@ class PvBalanceMonthCard extends HTMLElement {
         <div class="legend">
           <span><span class="dot" style="background:#30a46c"></span>Eksport do sieci</span>
           <span><span class="dot" style="background:#e5484d"></span>Import z sieci</span>
-          <span class="hint">Kwota dnia (zarobek za eksport − koszt importu): nad słupkiem lub po najechaniu / dotknięciu</span>
+          <span class="hint">Kwota dnia (depozyt − energia − dystrybucja zmienna): nad słupkiem lub po najechaniu / dotknięciu</span>
         </div>
       </ha-card>`;
     this.shadowRoot.querySelector(".title").textContent = this._c.title;
@@ -161,16 +168,23 @@ class PvBalanceMonthCard extends HTMLElement {
     if (month !== this._month) return;
     this._error = null;
     const t2 = new Set(c.t2_hours.map(Number));
+    const vat = 1 + c.vat / 100;
+    const split = c.energy_t1 != null;
+    const rate = {
+      e1: split ? c.energy_t1 * vat : c.price_t1, e2: split ? c.energy_t2 * vat : c.price_t2,
+      d1: split ? (c.dist_t1 || 0) * vat : 0, d2: split ? (c.dist_t2 || 0) * vat : 0,
+    };
     const day = Array.from({ length: days }, (_, i) => ({
-      d: i + 1, exp: 0, imp: 0, impT1: 0, impT2: 0, cost: 0, earn: 0,
+      d: i + 1, exp: 0, imp: 0, impT1: 0, impT2: 0, energy: 0, dist: 0, cost: 0, earn: 0,
     }));
     for (const r of res[c.import_entity] || []) {
       const t = new Date(r.start);
       const kwh = r.change || 0;
       const o = day[t.getDate() - 1];
-      if (t2.has(t.getHours())) { o.impT2 += kwh; o.cost += kwh * c.price_t2; }
-      else { o.impT1 += kwh; o.cost += kwh * c.price_t1; }
+      if (t2.has(t.getHours())) { o.impT2 += kwh; o.energy += kwh * rate.e2; o.dist += kwh * rate.d2; }
+      else { o.impT1 += kwh; o.energy += kwh * rate.e1; o.dist += kwh * rate.d1; }
       o.imp += kwh;
+      o.cost = o.energy + o.dist;
     }
     for (const r of res[c.export_entity] || []) day[new Date(r.start).getDate() - 1].exp += r.change || 0;
     for (const r of res[c.earnings_statistic] || []) day[new Date(r.start).getDate() - 1].earn += r.change || 0;
@@ -183,6 +197,7 @@ class PvBalanceMonthCard extends HTMLElement {
       month, days, day, elapsed,
       fixed: (c.fixed_monthly * elapsed) / days,
       estimated: !!months[month]?.estimated,
+      split,
     };
     this._render();
   }
@@ -207,6 +222,7 @@ class PvBalanceMonthCard extends HTMLElement {
     }
     const sum = (k) => D.day.reduce((a, o) => a + o[k], 0);
     const exp = sum("exp"), imp = sum("imp"), earn = sum("earn"), cost = sum("cost");
+    const energy = sum("energy"), dist = sum("dist");
     const impT1 = sum("impT1"), impT2 = sum("impT2");
     const balance = earn - cost - D.fixed;
     title.innerHTML = "";
@@ -217,22 +233,30 @@ class PvBalanceMonthCard extends HTMLElement {
       b.textContent = "RCEm szacowana";
       title.append(b);
     }
+    const importKpis = D.split
+      ? `<div class="kpi"><div class="l">Energia pobrana (pokrywa depozyt)</div>
+          <div class="v neg">${fmtPLN(energy)}</div>
+          <div class="s">${fmtKWh(imp)} (T1 ${num(impT1)} · T2 ${num(impT2)})</div></div>
+        <div class="kpi"><div class="l">Dystrybucja (płatna zawsze)</div>
+          <div class="v neg">${fmtPLN(dist + D.fixed)}</div>
+          <div class="s">zmienna ${fmtPLN(dist)} + stała ${fmtPLN(D.fixed)}</div></div>`
+      : `<div class="kpi"><div class="l">Import → koszt energii</div>
+          <div class="v neg">${fmtPLN(cost)}</div>
+          <div class="s">${fmtKWh(imp)} (T1 ${num(impT1)} · T2 ${num(impT2)})</div></div>
+        <div class="kpi"><div class="l">Opłaty stałe</div>
+          <div class="v">${fmtPLN(D.fixed)}</div>
+          <div class="s">z ${fmtPLN(this._c.fixed_monthly)} / mies.</div></div>`;
     kpis.innerHTML = `
-      <div class="kpi"><div class="l">Bilans miesiąca (z opł. stałymi)</div>
+      <div class="kpi"><div class="l">Bilans miesiąca</div>
         <div class="v ${balance >= 0 ? "pos" : "neg"}">${fmtPLN(balance)}</div>
-        <div class="s">śr. ${fmtPLN(balance / D.elapsed)} / dzień</div></div>
-      <div class="kpi"><div class="l">Eksport → zarobek</div>
+        <div class="s">depozyt − energia − dystrybucja · śr. ${fmtPLN(balance / D.elapsed)} / dzień</div></div>
+      <div class="kpi"><div class="l">Depozyt z eksportu (RCEm × 1,23)</div>
         <div class="v pos">${fmtPLN(earn)}</div>
         <div class="s">${fmtKWh(exp)} · ${exp ? num(earn / exp, 3) : "–"} zł/kWh</div></div>
-      <div class="kpi"><div class="l">Import → koszt energii</div>
-        <div class="v neg">${fmtPLN(cost)}</div>
-        <div class="s">${fmtKWh(imp)} (T1 ${num(impT1)} · T2 ${num(impT2)})</div></div>
-      <div class="kpi"><div class="l">Opłaty stałe</div>
-        <div class="v">${fmtPLN(D.fixed)}</div>
-        <div class="s">z ${fmtPLN(this._c.fixed_monthly)} / mies.</div></div>
+      ${importKpis}
       <div class="kpi"><div class="l">Saldo energii</div>
         <div class="v">${(exp - imp >= 0 ? "+" : "−") + fmtKWh(Math.abs(exp - imp))}</div>
-        <div class="s">eksport − import</div></div>`;
+        <div class="s">eksport − import (po bilansowaniu)</div></div>`;
 
     const W = Math.max(320, this.shadowRoot.querySelector(".chart").clientWidth || 600);
     const H = 300, padL = 40, padR = 8, padT = 22, padB = 22;
@@ -278,8 +302,9 @@ class PvBalanceMonthCard extends HTMLElement {
       if (!grp) { tip.style.display = "none"; return; }
       const o = D.day[+grp.dataset.i];
       tip.innerHTML = `<b>${o.d} ${MONTHS_GEN[+D.month.slice(5) - 1]}</b><br>
-        Eksport: ${fmtKWh(o.exp)} → <span class="pos">${fmtPLN(o.earn)}</span><br>
+        Eksport: ${fmtKWh(o.exp)} → depozyt <span class="pos">${fmtPLN(o.earn)}</span><br>
         Import: ${fmtKWh(o.imp)} (T1 ${num(o.impT1)} / T2 ${num(o.impT2)}) → <span class="neg">${fmtPLN(-o.cost)}</span><br>
+        ${D.split ? `<span style="color:var(--secondary-text-color)">energia ${fmtPLN(o.energy)} · dystrybucja ${fmtPLN(o.dist)}</span><br>` : ""}
         <b>Dzień: <span class="${o.net >= 0 ? "pos" : "neg"}">${fmtPLN(o.net)}</span></b>`;
       tip.style.display = "block";
       const box = this.shadowRoot.querySelector(".chart").getBoundingClientRect();
